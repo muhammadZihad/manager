@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manager — start your whole project with one click</title>
+<meta name="description" content="A cross-platform desktop app that starts your entire dev environment — commands, terminals and AI agents — with a single click.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%2315161B'/%3E%3Crect x='64' y='120' width='384' height='272' rx='48' fill='%231B1D24' stroke='%232EE6A6' stroke-width='16'/%3E%3Crect x='98' y='188' width='64' height='26' rx='13' fill='%232EE6A6'/%3E%3Crect x='98' y='244' width='48' height='26' rx='13' fill='%232EE6A6' fill-opacity='.5'/%3E%3Cpath d='M248 214l38 38-38 38' stroke='%232EE6A6' stroke-width='30' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Crect x='316' y='236' width='86' height='30' rx='15' fill='%232EE6A6'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --teal: #2ee6a6;
+    --teal-dim: #1f9e73;
+    --bg: #0f1014;
+    --bg-2: #15161b;
+    --panel: #1b1d24;
+    --panel-2: #21232b;
+    --border: #262933;
+    --border-2: #333743;
+    --text: #e6e7eb;
+    --dim: #9a9ea8;
+    --faint: #6b6f7a;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --maxw: 1120px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  a { color: inherit; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(15,16,20,0.82);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-in {
+    max-width: var(--maxw); margin: 0 auto; padding: 12px 24px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .nav-brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -0.01em; }
+  .nav-links { margin-left: auto; display: flex; align-items: center; gap: 26px; font-size: 14px; }
+  .nav-links a { color: var(--dim); text-decoration: none; transition: color .15s; }
+  .nav-links a:hover { color: var(--text); }
+  .nav-gh {
+    border: 1px solid var(--border-2); border-radius: 8px;
+    padding: 7px 14px; font-size: 13.5px; font-weight: 600;
+    text-decoration: none; transition: background .15s, border-color .15s;
+  }
+  .nav-gh:hover { background: var(--panel-2); border-color: var(--faint); }
+  @media (max-width: 720px) { .nav-links a:not(.nav-gh) { display: none; } }
+
+  /* ---------- hero ---------- */
+  header.hero { position: relative; padding: 92px 0 72px; text-align: center; overflow: hidden; }
+  .glow {
+    position: absolute; left: 50%; top: -260px; transform: translateX(-50%);
+    width: 900px; height: 620px; pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(46,230,166,.15), transparent 62%);
+  }
+  .grid-bg {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image: linear-gradient(var(--border) 1px, transparent 1px),
+                      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 70% 55% at 50% 22%, #000 20%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 22%, #000 20%, transparent 75%);
+    opacity: .5;
+  }
+  .hero-in { position: relative; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid rgba(46,230,166,.28); background: rgba(46,230,166,.08);
+    color: var(--teal); border-radius: 999px;
+    padding: 5px 14px; font-size: 12.5px; font-weight: 600;
+    letter-spacing: .02em; margin-bottom: 28px;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); }
+  h1 {
+    font-size: clamp(40px, 7vw, 68px); line-height: 1.05;
+    letter-spacing: -0.035em; font-weight: 700; margin: 0 0 20px;
+  }
+  h1 .accent {
+    background: linear-gradient(120deg, var(--teal), #7af5cd);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .lede {
+    max-width: 640px; margin: 0 auto 36px;
+    font-size: clamp(16px, 2.1vw, 19px); color: var(--dim);
+  }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 12px 22px; border-radius: 10px;
+    font-size: 14.5px; font-weight: 620; text-decoration: none;
+    border: 1px solid transparent; transition: transform .12s, box-shadow .18s, background .15s;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary {
+    background: var(--teal); color: #08130e;
+    box-shadow: 0 6px 24px -6px rgba(46,230,166,.55);
+  }
+  .btn-primary:hover { box-shadow: 0 10px 32px -6px rgba(46,230,166,.7); }
+  .btn-ghost { background: var(--panel); border-color: var(--border-2); color: var(--text); }
+  .btn-ghost:hover { background: var(--panel-2); }
+  .hero-note { margin-top: 18px; font-size: 12.5px; color: var(--faint); }
+
+  /* ---------- shot ---------- */
+  .shot { margin-top: 64px; position: relative; }
+  .shot-frame {
+    border-radius: 16px; overflow: hidden;
+    border: 1px solid var(--border-2);
+    box-shadow: 0 40px 90px -30px rgba(0,0,0,.85), 0 0 0 1px rgba(255,255,255,.02);
+    background: var(--bg-2);
+  }
+  .shot-frame svg { display: block; width: 100%; height: auto; }
+  .shot-cap { margin-top: 14px; font-size: 12.5px; color: var(--faint); text-align: center; }
+
+  /* ---------- sections ---------- */
+  section { padding: 88px 0; }
+  .eyebrow {
+    font-size: 12px; font-weight: 700; letter-spacing: .11em;
+    text-transform: uppercase; color: var(--teal); margin-bottom: 12px;
+  }
+  h2 {
+    font-size: clamp(27px, 4vw, 38px); letter-spacing: -0.028em;
+    line-height: 1.15; margin: 0 0 14px; font-weight: 690;
+  }
+  .sec-lede { color: var(--dim); max-width: 620px; margin: 0 0 48px; font-size: 16px; }
+  .center { text-align: center; }
+  .center .sec-lede { margin-left: auto; margin-right: auto; }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  @media (max-width: 940px) { .cards { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 620px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: linear-gradient(180deg, var(--panel), #191b21);
+    border: 1px solid var(--border); border-radius: 14px;
+    padding: 26px 24px; transition: border-color .18s, transform .18s;
+  }
+  .card:hover { border-color: var(--border-2); transform: translateY(-2px); }
+  .card-ico {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: rgba(46,230,166,.1); border: 1px solid rgba(46,230,166,.2);
+    display: grid; place-items: center; margin-bottom: 18px; color: var(--teal);
+  }
+  .card h3 { margin: 0 0 8px; font-size: 16px; font-weight: 640; letter-spacing: -0.012em; }
+  .card p { margin: 0; font-size: 14px; color: var(--dim); line-height: 1.62; }
+  .card code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: rgba(255,255,255,.05); padding: 1px 5px; border-radius: 4px; color: #c9ccd3;
+  }
+
+  /* ---------- steps ---------- */
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; counter-reset: s; }
+  @media (max-width: 900px) { .steps { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .steps { grid-template-columns: 1fr; } }
+  .step {
+    border-top: 2px solid var(--border-2); padding-top: 18px; position: relative;
+  }
+  .step::before {
+    counter-increment: s; content: counter(s);
+    font-family: var(--mono); font-size: 12px; font-weight: 700;
+    color: var(--teal); display: block; margin-bottom: 8px;
+  }
+  .step h4 { margin: 0 0 6px; font-size: 15px; font-weight: 620; }
+  .step p { margin: 0; font-size: 13.5px; color: var(--dim); }
+
+  /* ---------- split / arch ---------- */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+  @media (max-width: 880px) { .split { grid-template-columns: 1fr; gap: 34px; } }
+  .term {
+    background: #121317; border: 1px solid var(--border-2); border-radius: 12px;
+    overflow: hidden; font-family: var(--mono); font-size: 13px;
+  }
+  .term-bar {
+    display: flex; align-items: center; gap: 7px;
+    padding: 11px 14px; border-bottom: 1px solid var(--border);
+    background: #16171c;
+  }
+  .term-bar i { width: 10px; height: 10px; border-radius: 50%; background: #2f333d; }
+  .term-bar span { margin-left: 8px; font-family: var(--sans); font-size: 12px; color: var(--faint); }
+  .term-body { padding: 18px; line-height: 1.75; white-space: pre-wrap; }
+  .c-teal { color: var(--teal); }
+  .c-dim { color: var(--faint); }
+  .c-warn { color: #e6b02e; }
+  ul.ticks { list-style: none; padding: 0; margin: 24px 0 0; }
+  ul.ticks li {
+    position: relative; padding-left: 28px; margin-bottom: 13px;
+    font-size: 14.5px; color: var(--dim);
+  }
+  ul.ticks li::before {
+    content: ""; position: absolute; left: 0; top: 7px;
+    width: 15px; height: 9px; border-left: 2px solid var(--teal);
+    border-bottom: 2px solid var(--teal); transform: rotate(-45deg);
+  }
+  ul.ticks strong { color: var(--text); font-weight: 600; }
+
+  /* ---------- stack ---------- */
+  .stack { display: flex; flex-wrap: wrap; gap: 10px; }
+  .chip {
+    border: 1px solid var(--border-2); background: var(--panel);
+    border-radius: 999px; padding: 8px 16px; font-size: 13.5px; color: var(--dim);
+  }
+  .chip b { color: var(--text); font-weight: 620; }
+
+  /* ---------- install ---------- */
+  .pre {
+    background: #121317; border: 1px solid var(--border-2); border-radius: 12px;
+    padding: 20px 22px; font-family: var(--mono); font-size: 13px;
+    color: #c9ccd3; overflow-x: auto; line-height: 1.85;
+  }
+  .pre .p { color: var(--teal); user-select: none; }
+  .warnbox {
+    margin-top: 22px; border-left: 2px solid #e6b02e;
+    background: rgba(230,176,46,.07); border-radius: 0 8px 8px 0;
+    padding: 15px 18px; font-size: 13.5px; color: #c9ccd3;
+  }
+  .warnbox strong { color: var(--text); }
+
+  /* ---------- kbd ---------- */
+  table.keys { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.keys td { padding: 12px 0; border-bottom: 1px solid var(--border); color: var(--dim); }
+  table.keys td:first-child { width: 260px; }
+  kbd {
+    font-family: var(--sans); font-size: 12px; font-weight: 600;
+    background: var(--panel-2); border: 1px solid var(--border-2);
+    border-bottom-width: 2px; border-radius: 5px;
+    padding: 3px 7px; color: var(--text);
+  }
+
+  footer {
+    border-top: 1px solid var(--border); padding: 44px 0 56px;
+    color: var(--faint); font-size: 13.5px;
+  }
+  .foot-in { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .foot-in a { color: var(--dim); text-decoration: none; }
+  .foot-in a:hover { color: var(--text); }
+  .foot-sp { margin-left: auto; }
+
+  .reveal { opacity: 0; transform: translateY(14px); transition: opacity .6s ease, transform .6s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <div class="nav-brand">
+      <svg width="26" height="26" viewBox="0 0 512 512" fill="none" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#15161B"/><rect x="64" y="120" width="384" height="272" rx="48" fill="#1B1D24" stroke="#2EE6A6" stroke-width="16"/><rect x="98" y="188" width="64" height="26" rx="13" fill="#2EE6A6"/><rect x="98" y="244" width="48" height="26" rx="13" fill="#2EE6A6" fill-opacity=".5"/><path d="M248 214l38 38-38 38" stroke="#2EE6A6" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><rect x="316" y="236" width="86" height="30" rx="15" fill="#2EE6A6"/></svg>
+      Manager
+    </div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#stack">Stack</a>
+      <a href="#install">Install</a>
+      <a class="nav-gh" href="https://github.com/muhammadZihad/manager">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="glow"></div>
+  <div class="grid-bg"></div>
+  <div class="wrap hero-in">
+    <div class="pill"><span class="dot"></span> Free &amp; open source · macOS, Windows, Linux</div>
+    <h1>Start your whole project<br><span class="accent">with one click.</span></h1>
+    <p class="lede">
+      Manager runs every command, terminal and AI agent your project needs — each in a real PTY,
+      each in its own directory — from a single button. Stop retyping the same four commands every morning.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/muhammadZihad/manager/releases">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+        Download
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/muhammadZihad/manager">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7 0-.7 0-.7 1.2 0 1.9 1.2 1.9 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6.1-3.2 0 0 1-.3 3.4 1.2a11.5 11.5 0 0 1 6 0C17.4 4.7 18.4 5 18.4 5c.7 1.6.3 2.8.1 3.2.8.8 1.3 1.9 1.3 3.1 0 4.7-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3Z"/></svg>
+        View source
+      </a>
+    </div>
+    <p class="hero-note">Builds are currently unsigned — see the install notes below.</p>
+
+    <div class="shot reveal">
+      <div class="shot-frame">
+        <svg viewBox="0 0 1100 620" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The Manager interface: a project sidebar with Commands, Agents and Terminals groups beside a live terminal session">
+          <defs>
+            <clipPath id="uiF"><rect x="20" y="20" width="1060" height="580" rx="14"/></clipPath>
+            <style>.us{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Helvetica,Arial,sans-serif}.um{font-family:'JetBrains Mono',Menlo,Consolas,monospace}</style>
+          </defs>
+          <g clip-path="url(#uiF)">
+            <rect x="20" y="20" width="1060" height="580" fill="#15161B"/>
+            <rect x="20" y="20" width="290" height="580" fill="#1B1D24"/>
+            <line x1="310" y1="20" x2="310" y2="600" stroke="#2A2D37" stroke-width="1.5"/>
+            <rect x="42" y="44" width="246" height="34" rx="8" fill="#1C1E26" stroke="#2A2D37" stroke-width="1.5"/>
+            <circle cx="60" cy="61" r="5" stroke="#6B6F7A" stroke-width="1.8" fill="none"/>
+            <line x1="64" y1="65" x2="68" y2="69" stroke="#6B6F7A" stroke-width="1.8" stroke-linecap="round"/>
+            <text x="78" y="66" class="us" font-size="12.5" fill="#6B6F7A">Search projects &amp; items</text>
+            <rect x="34" y="94" width="262" height="34" rx="8" fill="#2EE6A6" fill-opacity="0.12"/>
+            <path d="M48 106l6 6 6-6" stroke="#9A9EA8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <text x="70" y="116" class="us" font-size="13.5" font-weight="600" fill="#E6E7EB">acme-storefront</text>
+            <rect x="212" y="102" width="26" height="18" rx="9" fill="#2EE6A6"/>
+            <text x="225" y="115" class="us" font-size="11" font-weight="700" fill="#0B0C0F" text-anchor="middle">3</text>
+            <circle cx="256" cy="111" r="9" fill="#21232B"/>
+            <path d="M252.5 107.5h7M252.5 111h7M252.5 114.5h7" stroke="#9A9EA8" stroke-width="1.4" stroke-linecap="round"/>
+            <circle cx="280" cy="111" r="10" fill="#2EE6A6" fill-opacity="0.16"/>
+            <path d="M277 106.5l7 4.5-7 4.5z" fill="#2EE6A6"/>
+            <path d="M62 146l5 5 5-5" stroke="#9A9EA8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <rect x="80" y="142" width="11" height="11" rx="2.5" stroke="#9A9EA8" stroke-width="1.5" fill="none"/>
+            <text x="99" y="152" class="us" font-size="12" fill="#9A9EA8">Commands</text>
+            <text x="286" y="152" class="us" font-size="11" fill="#6B6F7A" text-anchor="end">2</text>
+            <rect x="72" y="164" width="224" height="26" rx="6" fill="#2EE6A6" fill-opacity="0.12"/>
+            <rect x="72" y="164" width="2.5" height="26" fill="#2EE6A6"/>
+            <circle cx="92" cy="177" r="7.5" fill="#2EE6A6" fill-opacity="0.22"/>
+            <circle cx="92" cy="177" r="4" fill="#2EE6A6"/>
+            <text x="106" y="181" class="us" font-size="12.5" font-weight="500" fill="#E6E7EB">dev server</text>
+            <circle cx="92" cy="209" r="4" fill="#2EE6A6"/>
+            <text x="106" y="213" class="us" font-size="12.5" fill="#9A9EA8">build watch</text>
+            <path d="M62 242l5 5 5-5" stroke="#9A9EA8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <rect x="80" y="238" width="11" height="11" rx="3" stroke="#9A9EA8" stroke-width="1.5" fill="none"/>
+            <text x="99" y="248" class="us" font-size="12" fill="#9A9EA8">Agents</text>
+            <text x="286" y="248" class="us" font-size="11" fill="#6B6F7A" text-anchor="end">1</text>
+            <circle cx="92" cy="273" r="4" fill="#2EE6A6"/>
+            <text x="106" y="277" class="us" font-size="12.5" fill="#9A9EA8">claude</text>
+            <path d="M62 306l5 5 5-5" stroke="#9A9EA8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <rect x="80" y="302" width="11" height="11" rx="2.5" stroke="#9A9EA8" stroke-width="1.5" fill="none"/>
+            <text x="99" y="312" class="us" font-size="12" fill="#9A9EA8">Terminals</text>
+            <text x="286" y="312" class="us" font-size="11" fill="#6B6F7A" text-anchor="end">1</text>
+            <circle cx="92" cy="337" r="4" fill="#6B6F7A"/>
+            <text x="106" y="341" class="us" font-size="12.5" fill="#9A9EA8">zsh</text>
+            <path d="M51 377l6 6-6 6" stroke="#6B6F7A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <text x="70" y="388" class="us" font-size="13.5" font-weight="500" fill="#9A9EA8">internal-api</text>
+            <rect x="34" y="416" width="262" height="34" rx="8" stroke="#383C48" stroke-width="1.5" stroke-dasharray="5 4" fill="none"/>
+            <text x="165" y="438" class="us" font-size="12.5" fill="#9A9EA8" text-anchor="middle">+ New Project</text>
+            <line x1="20" y1="556" x2="310" y2="556" stroke="#2A2D37" stroke-width="1.5"/>
+            <circle cx="48" cy="578" r="7.5" stroke="#6B6F7A" stroke-width="1.6" fill="none"/>
+            <text x="66" y="583" class="us" font-size="12.5" fill="#9A9EA8">App Settings</text>
+            <rect x="310" y="20" width="770" height="580" fill="#181A20"/>
+            <g class="um" font-size="13">
+              <text x="344" y="70" fill="#2EE6A6">➜</text><text x="368" y="70" fill="#E4E6EB">npm run dev</text>
+              <text x="344" y="102" fill="#6B6F7A">&gt; acme-storefront@1.4.0 dev</text>
+              <text x="344" y="124" fill="#6B6F7A">&gt; vite</text>
+              <text x="344" y="166" fill="#9A9EA8">  VITE v7.3.6  ready in 142 ms</text>
+              <text x="344" y="206" fill="#2EE6A6">  ➜  Local:</text><text x="452" y="206" fill="#E4E6EB">http://localhost:5173/</text>
+              <text x="344" y="228" fill="#2EE6A6">  ➜  Network:</text><text x="452" y="228" fill="#6B6F7A">use --host to expose</text>
+              <text x="344" y="270" fill="#6B6F7A">02:41:18 [vite] hmr update /src/routes/cart.tsx</text>
+              <text x="344" y="292" fill="#6B6F7A">02:41:26 [vite] hmr update /src/lib/pricing.ts</text>
+              <text x="344" y="334" fill="#E6B02E">  ⚠  2 packages need attention</text>
+              <text x="344" y="376" fill="#2EE6A6">➜</text>
+              <rect x="368" y="365" width="8" height="16" fill="#2EE6A6"/>
+            </g>
+          </g>
+          <rect x="20" y="20" width="1060" height="580" rx="14" stroke="#2A2D37" stroke-width="2" fill="none"/>
+        </svg>
+      </div>
+      <p class="shot-cap">Projects and their groups on the left; the live session on the right.</p>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="eyebrow">Features</div>
+      <h2>Everything a project needs, in one place</h2>
+      <p class="sec-lede">Define it once. Start it forever.</p>
+    </div>
+    <div class="cards">
+      <div class="card reveal">
+        <div class="card-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 3 14 9-14 9V3Z"/></svg></div>
+        <h3>One-click startup</h3>
+        <p>Mark items <em>auto-start</em> and one button spawns them all — dev server, watcher, API, agent — each in its own PTY and working directory.</p>
+      </div>
+      <div class="card reveal">
+        <div class="card-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m6 9 3 3-3 3"/><path d="M13 15h4"/></svg></div>
+        <h3>Real terminals</h3>
+        <p>xterm.js over genuine PTYs. Interactive prompts, colours, TUIs and live resize all behave exactly as they do in your own terminal.</p>
+      </div>
+      <div class="card reveal">
+        <div class="card-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 4v16"/><path d="M13 9h4"/><path d="M13 14h4"/></svg></div>
+        <h3>Project-shaped sidebar</h3>
+        <p>Projects expand into Commands, Agents and Terminals — with running badges, status dots, search, and the active session highlighted inline.</p>
+      </div>
+      <div class="card reveal">
+        <div class="card-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M20 17v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/></svg></div>
+        <h3>Import your scripts</h3>
+        <p>Detects <code>package.json</code> scripts (respecting your lockfile's package manager) and <code>Makefile</code> targets. Tick the ones you want.</p>
+      </div>
+      <div class="card reveal">
+        <div class="card-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 0-7 7v4l-2 4h18l-2-4V9a7 7 0 0 0-7-7Z"/><path d="M9 21h6"/></svg></div>
+        <h3>Lives in your tray</h3>
+        <p>Closing the window hides it — processes keep running. The tray shows a live session count, and quitting mid-build asks first.</p>
+      </div>
+      <div class="card reveal">
+        <div class="card-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2 2 2 0 1 1-4 0 1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 2 15a2 2 0 1 1 0-4 1.7 1.7 0 0 0 1.5-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10 4a2 2 0 1 1 4 0 1.7 1.7 0 0 0 2.9 1.5l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 22 11a2 2 0 1 1 0 4Z"/></svg></div>
+        <h3>Yours to tune</h3>
+        <p>Dark, light or system theme. Pick a default shell from the ones actually installed. Set terminal font, size and scrollback.</p>
+      </div>
+      <div class="card reveal">
+        <div class="card-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M9 15h6"/></svg></div>
+        <h3>Export &amp; share</h3>
+        <p>Send a project — or all of them — to a JSON file. Import merges rather than overwrites, so team setups travel safely.</p>
+      </div>
+      <div class="card reveal">
+        <div class="card-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2h4"/><path d="M12 14v-4"/><path d="M4 13a8 8 0 0 1 16 0 8 8 0 0 1-16 0Z"/></svg></div>
+        <h3>Debuggable by design</h3>
+        <p>File-based logging on both the Rust and React sides, plus an error boundary — so a bad day produces evidence, not a blank window.</p>
+      </div>
+      <div class="card reveal">
+        <div class="card-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H4z"/><path d="M2 20h20"/></svg></div>
+        <h3>Genuinely native</h3>
+        <p>Rust + Tauri with the system WebView. A single-digit-megabyte binary instead of a bundled browser per app.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how" style="background:var(--bg-2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="eyebrow">How it works</div>
+      <h2>Four steps, then never again</h2>
+      <p class="sec-lede">Setup takes a couple of minutes per project. After that it's one click, every day.</p>
+    </div>
+    <div class="steps reveal">
+      <div class="step"><h4>Add a project</h4><p>Name it and point it at the repo directory.</p></div>
+      <div class="step"><h4>Add items</h4><p>Commands, agents, terminals — or import your existing scripts.</p></div>
+      <div class="step"><h4>Mark auto-start</h4><p>Choose what belongs in the one-click set.</p></div>
+      <div class="step"><h4>Press ▶</h4><p>Everything spawns at once and streams live.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap split">
+    <div class="reveal">
+      <div class="eyebrow">Under the hood</div>
+      <h2>Real PTYs, not piped stdout</h2>
+      <p class="sec-lede" style="margin-bottom:0">
+        Most "run my scripts" tools pipe stdout and lose everything interesting. Manager allocates a genuine
+        pseudo-terminal per session, so programs behave exactly as they do in your shell.
+      </p>
+      <ul class="ticks">
+        <li><strong>Dedicated reader thread per session</strong> — PTY reads block, so they never touch the async runtime.</li>
+        <li><strong>Two-phase spawn</strong> — listeners attach before output flows, so nothing from fast starters is lost.</li>
+        <li><strong>Reaper thread per child</strong> — real exit codes, reported inline and in the sidebar.</li>
+        <li><strong>Nothing orphaned</strong> — every session is killed on quit, so no stray processes survive.</li>
+      </ul>
+    </div>
+    <div class="term reveal">
+      <div class="term-bar"><i></i><i></i><i></i><span>claude — agent session</span></div>
+<div class="term-body"><span class="c-teal">➜</span> claude
+
+<span class="c-dim">╭──────────────────────────────────╮
+│  Claude Code · ~/acme-storefront │
+╰──────────────────────────────────╯</span>
+
+<span class="c-teal">&gt;</span> refactor the cart reducer
+
+<span class="c-dim">● Reading src/store/cart.ts
+● Editing src/store/cart.ts
+  └ 42 insertions, 18 deletions</span>
+
+<span class="c-warn">⚠</span> 1 test needs updating
+
+<span class="c-teal">&gt;</span> <span style="background:#2ee6a6;color:#121317">&nbsp;</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="stack" style="background:var(--bg-2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="eyebrow">Technology</div>
+      <h2>Boring choices, deliberately</h2>
+      <p class="sec-lede">Small dependency surface, no bundled browser, and a PTY layer borrowed from a terminal that people already trust.</p>
+      <div class="stack">
+        <span class="chip"><b>Tauri 2</b> · Rust shell</span>
+        <span class="chip"><b>portable-pty</b> · WezTerm's PTY crate</span>
+        <span class="chip"><b>React 19</b> + <b>TypeScript</b></span>
+        <span class="chip"><b>xterm.js 5</b> · terminal emulation</span>
+        <span class="chip"><b>Zustand 5</b> · state</span>
+        <span class="chip"><b>Vite 7</b> · build</span>
+        <span class="chip"><b>lucide-react</b> · icons</span>
+        <span class="chip">CSS custom properties · theming</span>
+      </div>
+      <table class="keys" style="margin-top:44px">
+        <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd></td><td>New terminal in the active project</td></tr>
+        <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>W</kbd></td><td>Close the active session</td></tr>
+        <tr><td><kbd>Cmd/Ctrl</kbd> + <kbd>1</kbd>–<kbd>9</kbd></td><td>Jump to the <em>n</em>-th project</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="eyebrow">Install</div>
+      <h2>Get it running</h2>
+      <p class="sec-lede">Download a build, or compile from source in three commands.</p>
+    </div>
+    <div class="split reveal">
+      <div>
+        <h3 style="font-size:16px;margin:0 0 14px">Download a build</h3>
+        <p style="color:var(--dim);font-size:14.5px;margin:0 0 20px">
+          Grab the latest from the releases page. macOS ships a <code style="font-family:var(--mono);font-size:12.5px">.dmg</code>;
+          Windows currently ships a portable <code style="font-family:var(--mono);font-size:12.5px">.zip</code>.
+        </p>
+        <a class="btn btn-primary" href="https://github.com/muhammadZihad/manager/releases">Go to Releases</a>
+        <div class="warnbox">
+          <strong>Unsigned builds.</strong> Gatekeeper and SmartScreen will warn on first launch. On macOS,
+          right-click the app → <strong>Open</strong> to allow it once. Signing and notarisation are on the roadmap,
+          as is a proper Windows installer.
+        </div>
+      </div>
+      <div>
+        <h3 style="font-size:16px;margin:0 0 14px">Build from source</h3>
+        <p style="color:var(--dim);font-size:14.5px;margin:0 0 20px">
+          Needs Node 18+, a stable Rust toolchain, and your platform's Tauri prerequisites.
+        </p>
+<div class="pre"><span class="p">$</span> git clone https://github.com/muhammadZihad/manager.git
+<span class="p">$</span> cd manager
+<span class="p">$</span> npm install
+<span class="p">$</span> npm run tauri dev</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-in">
+    <svg width="20" height="20" viewBox="0 0 512 512" fill="none" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#15161B"/><rect x="64" y="120" width="384" height="272" rx="48" fill="#1B1D24" stroke="#2EE6A6" stroke-width="16"/><rect x="98" y="188" width="64" height="26" rx="13" fill="#2EE6A6"/><rect x="98" y="244" width="48" height="26" rx="13" fill="#2EE6A6" fill-opacity=".5"/><path d="M248 214l38 38-38 38" stroke="#2EE6A6" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><rect x="316" y="236" width="86" height="30" rx="15" fill="#2EE6A6"/></svg>
+    <span>Manager — MIT licensed</span>
+    <span class="foot-sp"><a href="https://github.com/muhammadZihad/manager">GitHub</a></span>
+    <a href="https://github.com/muhammadZihad/manager/releases">Releases</a>
+    <a href="https://github.com/muhammadZihad/manager/issues">Issues</a>
+  </div>
+</footer>
+
+<script>
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+  }, { rootMargin: "0px 0px -60px 0px", threshold: 0.05 });
+  document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+</script>
+
+</body>
+</html>

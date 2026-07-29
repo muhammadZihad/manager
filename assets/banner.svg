@@ -1,0 +1,57 @@
+<svg width="1200" height="340" viewBox="0 0 1200 340" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Manager — start your whole project with one click</title>
+  <defs>
+    <clipPath id="bn-window">
+      <rect x="102" y="118" width="150" height="118" rx="18" />
+    </clipPath>
+    <linearGradient id="bn-bg" x1="0" y1="0" x2="1200" y2="340" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#15161B" />
+      <stop offset="1" stop-color="#101116" />
+    </linearGradient>
+    <radialGradient id="bn-glow" cx="0" cy="0" r="1"
+      gradientTransform="translate(178 176) rotate(90) scale(200)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2EE6A6" stop-opacity="0.16" />
+      <stop offset="1" stop-color="#2EE6A6" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="340" rx="20" fill="url(#bn-bg)" />
+  <rect width="1200" height="340" rx="20" fill="url(#bn-glow)" />
+
+  <!-- logo mark -->
+  <g clip-path="url(#bn-window)">
+    <rect x="102" y="118" width="150" height="118" fill="#1B1D24" />
+    <rect x="102" y="118" width="48" height="118" fill="#2EE6A6" fill-opacity="0.15" />
+  </g>
+  <rect x="102" y="118" width="150" height="118" rx="18" stroke="#2EE6A6" stroke-width="4.5" />
+  <rect x="114" y="139" width="24" height="6.5" rx="3.25" fill="#2EE6A6" />
+  <rect x="114" y="156" width="18" height="6.5" rx="3.25" fill="#2EE6A6" fill-opacity="0.45" />
+  <rect x="114" y="173" width="21" height="6.5" rx="3.25" fill="#2EE6A6" fill-opacity="0.45" />
+  <rect x="114" y="190" width="15" height="6.5" rx="3.25" fill="#2EE6A6" fill-opacity="0.45" />
+  <path d="M167 151l12 12-12 12" stroke="#2EE6A6" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />
+  <rect x="189" y="159" width="42" height="9" rx="4.5" fill="#2EE6A6" />
+  <rect x="167" y="182" width="57" height="7.5" rx="3.75" fill="#2EE6A6" fill-opacity="0.35" />
+
+  <!-- wordmark -->
+  <text x="300" y="163"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif"
+    font-size="64" font-weight="700" letter-spacing="-1.6" fill="#E6E7EB">Manager</text>
+  <text x="302" y="203"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif"
+    font-size="21" fill="#9A9EA8">Start your whole project — commands, terminals and AI agents — with one click.</text>
+
+  <!-- platform chips -->
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="600">
+    <rect x="302" y="230" width="86" height="30" rx="15" fill="#2EE6A6" fill-opacity="0.12" />
+    <text x="345" y="250" fill="#2EE6A6" text-anchor="middle">macOS</text>
+
+    <rect x="398" y="230" width="94" height="30" rx="15" fill="#2EE6A6" fill-opacity="0.12" />
+    <text x="445" y="250" fill="#2EE6A6" text-anchor="middle">Windows</text>
+
+    <rect x="502" y="230" width="76" height="30" rx="15" fill="#2EE6A6" fill-opacity="0.12" />
+    <text x="540" y="250" fill="#2EE6A6" text-anchor="middle">Linux</text>
+
+    <rect x="588" y="230" width="130" height="30" rx="15" fill="#FFFFFF" fill-opacity="0.06" />
+    <text x="653" y="250" fill="#9A9EA8" text-anchor="middle">Tauri + React</text>
+  </g>
+</svg>
