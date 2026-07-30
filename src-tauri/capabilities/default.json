@@ -5,8 +5,12 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:webview:allow-set-webview-zoom",
+    "core:window:allow-set-theme",
     "opener:default",
     "dialog:default",
-    "log:default"
+    "log:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text"
   ]
 }

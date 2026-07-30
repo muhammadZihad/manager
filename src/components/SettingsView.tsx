@@ -10,6 +10,7 @@ import { useStore } from "../store";
 import { pickDirectory } from "../lib/dialog";
 import { listShells } from "../lib/shell";
 import { exportProjectsToFile } from "../lib/transfer";
+import { projectConfigFileName } from "../lib/projectConfig";
 import { ImportPanel } from "./ImportPanel";
 import type { ImportCandidate } from "../lib/import";
 import type { Agent, ItemGroup, Project, Runnable } from "../types";
@@ -27,7 +28,9 @@ export function SettingsView({ project }: { project: Project }) {
   const confirmBeforeDelete = useStore((s) => s.config.settings.confirmBeforeDelete);
   const focusItemId = useStore((s) => s.focusItemId);
   const setFocusItem = useStore((s) => s.setFocusItem);
-  const [importOpen, setImportOpen] = useState(false);
+  // In the store so the sidebar's group context menu can open the importer.
+  const importOpen = useStore((s) => s.importOpen);
+  const setImportOpen = useStore((s) => s.setImportOpen);
 
   function handleImport(candidates: ImportCandidate[]) {
     candidates.forEach((c) => addItem(project.id, "commands", { name: c.name, command: c.command }));
@@ -64,6 +67,31 @@ export function SettingsView({ project }: { project: Project }) {
             </button>
           </div>
         </label>
+        <label className="item-editor__autostart" style={{ fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={project.storeConfigInProject ?? false}
+            disabled={!project.directory.trim()}
+            onChange={(e) => updateProject(project.id, { storeConfigInProject: e.target.checked })}
+          />
+          Keep this project's configuration in its own folder
+        </label>
+        <p className="settings-section__hint">
+          {project.directory.trim() ? (
+            <>
+              Writes commands, agents and terminals to{" "}
+              <code style={{ fontFamily: "var(--font-mono)", fontSize: 11.5 }}>
+                {projectConfigFileName(project.name)}
+              </code>{" "}
+              in the project directory, so the setup can be committed and shared. The file wins over
+              the app's own copy when it exists, so pulling a teammate's change picks it up. The
+              project directory itself is never written to the file.
+            </>
+          ) : (
+            "Set a project directory first — there's nowhere to write the file yet."
+          )}
+        </p>
+
         <div className="settings-section__actions">
           <button
             type="button"

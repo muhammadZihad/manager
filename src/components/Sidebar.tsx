@@ -8,18 +8,16 @@ import {
   ChevronDown,
   ChevronRight,
   FolderPlus,
-  Pencil,
   Play,
+  RotateCcw,
   Search,
   Settings,
   SquareTerminal,
   SquareCode,
   Square,
-  Trash2,
 } from "lucide-react";
 import { useStore } from "../store";
 import { pickDirectory } from "../lib/dialog";
-import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import type { ItemGroup, Project, Runnable } from "../types";
 
 const GROUPS: { key: ItemGroup; label: string; icon: typeof SquareCode }[] = [
@@ -27,6 +25,22 @@ const GROUPS: { key: ItemGroup; label: string; icon: typeof SquareCode }[] = [
   { key: "agents", label: "Agents", icon: Bot },
   { key: "terminals", label: "Terminals", icon: SquareTerminal },
 ];
+
+/** A project in the sidebar; `items` is null when nothing is being filtered. */
+type ProjectMatch = {
+  project: Project;
+  items: Record<ItemGroup, Runnable[]> | null;
+};
+
+/**
+ * Commands are searched as well as names — "artisan" or "npm" is often what you
+ * remember about an item, not whatever you happened to title it.
+ */
+function itemMatches(item: Runnable, query: string): boolean {
+  return (
+    item.name.toLowerCase().includes(query) || (item.command ?? "").toLowerCase().includes(query)
+  );
+}
 
 export function Sidebar() {
   const config = useStore((s) => s.config);
@@ -37,18 +51,34 @@ export function Sidebar() {
 
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [addingProject, setAddingProject] = useState(false);
+  // In the store so the context menu's "New project" can open this form.
+  const addingProject = useStore((s) => s.addingProject);
+  const setAddingProject = useStore((s) => s.setAddingProject);
 
-  const projects = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return config.projects;
-    return config.projects.filter((p) => {
-      if (p.name.toLowerCase().includes(q)) return true;
-      return (["commands", "agents", "terminals"] as ItemGroup[]).some((g) =>
-        p[g].some((item) => item.name.toLowerCase().includes(q)),
-      );
-    });
-  }, [config.projects, search]);
+  const query = search.trim().toLowerCase();
+
+  const matches = useMemo<ProjectMatch[]>(() => {
+    if (!query) return config.projects.map((project) => ({ project, items: null }));
+
+    const found: ProjectMatch[] = [];
+    for (const project of config.projects) {
+      // A project whose own name matches shows all of its items; otherwise only
+      // the items that matched are shown, so the result reflects the query.
+      if (project.name.toLowerCase().includes(query)) {
+        found.push({ project, items: null });
+        continue;
+      }
+      const items: Record<ItemGroup, Runnable[]> = {
+        commands: project.commands.filter((i) => itemMatches(i, query)),
+        agents: project.agents.filter((i) => itemMatches(i, query)),
+        terminals: project.terminals.filter((i) => itemMatches(i, query)),
+      };
+      if (items.commands.length || items.agents.length || items.terminals.length) {
+        found.push({ project, items });
+      }
+    }
+    return found;
+  }, [config.projects, query]);
 
   function toggle(id: string) {
     setExpanded((prev) => {
@@ -61,27 +91,33 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar__search">
-        <Search size={14} strokeWidth={2} />
+        <Search size={15} strokeWidth={2.25} />
         <input
+          id="sidebar-search"
           placeholder="Search projects & items"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
-      <div className="sidebar__list">
-        {projects.map((project) => (
+      <div className="sidebar__list" data-ctx="sidebar">
+        {matches.map(({ project, items }) => (
           <ProjectRow
             key={project.id}
             project={project}
+            visibleItems={items}
             isActive={project.id === activeProjectId}
-            isExpanded={expanded.has(project.id) || search.trim().length > 0}
+            isExpanded={expanded.has(project.id) || query.length > 0}
             onToggle={() => toggle(project.id)}
           />
         ))}
 
-        {projects.length === 0 && !addingProject && (
-          <div className="sidebar__empty">No projects yet — create one to get started.</div>
+        {matches.length === 0 && !addingProject && (
+          <div className="sidebar__empty">
+            {query
+              ? `Nothing matches “${search.trim()}”.`
+              : "No projects yet — create one to get started."}
+          </div>
         )}
 
         {addingProject ? (
@@ -94,7 +130,7 @@ export function Sidebar() {
           />
         ) : (
           <button className="sidebar__add-project" type="button" onClick={() => setAddingProject(true)}>
-            <FolderPlus size={15} strokeWidth={2} />
+            <FolderPlus size={15} strokeWidth={2.25} />
             New Project
           </button>
         )}
@@ -105,7 +141,7 @@ export function Sidebar() {
         type="button"
         onClick={() => setView("app-settings")}
       >
-        <Settings size={14} strokeWidth={1.75} />
+        <Settings size={15} strokeWidth={2.1} />
         App Settings
       </button>
     </aside>
@@ -160,11 +196,13 @@ function NewProjectForm({
 
 function ProjectRow({
   project,
+  visibleItems,
   isActive,
   isExpanded,
   onToggle,
 }: {
   project: Project;
+  visibleItems: Record<ItemGroup, Runnable[]> | null;
   isActive: boolean;
   isExpanded: boolean;
   onToggle: () => void;
@@ -182,6 +220,8 @@ function ProjectRow({
     <div className="project-row">
       <div
         className={`project-row__header${isActive ? " project-row__header--active" : ""}`}
+        data-ctx="project"
+        data-project-id={project.id}
         onClick={() => {
           selectProject(project.id);
           onToggle();
@@ -195,7 +235,7 @@ function ProjectRow({
             onToggle();
           }}
         >
-          {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          {isExpanded ? <ChevronDown size={15} strokeWidth={2.4} /> : <ChevronRight size={15} strokeWidth={2.4} />}
         </button>
         <span className="project-row__name">{project.name}</span>
         {runningCount > 0 && <span className="project-row__badge">{runningCount}</span>}
@@ -209,7 +249,7 @@ function ProjectRow({
             setView("settings");
           }}
         >
-          <Settings size={14} strokeWidth={1.75} />
+          <Settings size={15} strokeWidth={2.1} />
         </button>
         {runningCount > 0 ? (
           <button
@@ -221,7 +261,7 @@ function ProjectRow({
               stopProject(project.id);
             }}
           >
-            <Square size={13} strokeWidth={2} />
+            <Square size={13} strokeWidth={2.6} />
           </button>
         ) : (
           <button
@@ -235,16 +275,19 @@ function ProjectRow({
               startProject(project.id);
             }}
           >
-            <Play size={13} strokeWidth={2} />
+            <Play size={14} strokeWidth={2.25} />
           </button>
         )}
       </div>
 
       {isExpanded && (
         <div className="project-row__groups">
-          {GROUPS.map((group) => (
-            <GroupSection key={group.key} project={project} group={group} />
-          ))}
+          {GROUPS.map((group) => {
+            const items = visibleItems ? visibleItems[group.key] : project[group.key];
+            // While filtering, a group with no matches is noise — drop it.
+            if (visibleItems && items.length === 0) return null;
+            return <GroupSection key={group.key} project={project} group={group} items={items} />;
+          })}
         </div>
       )}
     </div>
@@ -254,19 +297,34 @@ function ProjectRow({
 function GroupSection({
   project,
   group,
+  items,
 }: {
   project: Project;
   group: { key: ItemGroup; label: string; icon: typeof SquareCode };
+  items: Runnable[];
 }) {
   const [open, setOpen] = useState(true);
-  const items = project[group.key];
   const Icon = group.icon;
 
   return (
     <div className="group-section">
-      <div className="group-section__header" onClick={() => setOpen((v) => !v)}>
-        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        <Icon size={13} strokeWidth={1.75} />
+      <div
+        className="group-section__header"
+        data-ctx="group"
+        data-group={group.key}
+        data-project-id={project.id}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {open ? (
+          <ChevronDown size={13} strokeWidth={2.5} />
+        ) : (
+          <ChevronRight size={13} strokeWidth={2.5} />
+        )}
+        <Icon
+          className={`group-section__icon group-section__icon--${group.key}`}
+          size={15}
+          strokeWidth={2.25}
+        />
         <span>{group.label}</span>
         <span className="group-section__count">{items.length}</span>
       </div>
@@ -282,31 +340,27 @@ function GroupSection({
   );
 }
 
+// Right-click behaviour lives in AppContextMenu, resolved from the data-ctx
+// attributes below — this row only declares what it is.
 function ItemRow({ project, group, item }: { project: Project; group: ItemGroup; item: Runnable }) {
   const tabs = useStore((s) => s.tabs);
   const activeTabItemId = useStore((s) => s.activeTabItemId);
   const openTab = useStore((s) => s.openTab);
   const setActiveTab = useStore((s) => s.setActiveTab);
   const stopItem = useStore((s) => s.stopItem);
-  const removeItem = useStore((s) => s.removeItem);
   const selectProject = useStore((s) => s.selectProject);
-  const setView = useStore((s) => s.setView);
-  const setFocusItem = useStore((s) => s.setFocusItem);
-  const confirmBeforeDelete = useStore((s) => s.config.settings.confirmBeforeDelete);
-
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
   const tab = tabs.find((t) => t.itemId === item.id);
   const status = tab?.status ?? "idle";
+  const ports = tab?.ports ?? [];
   const isActiveTab = item.id === activeTabItemId;
 
   function handleRowClick() {
     selectProject(project.id);
-    if (tab) {
-      setActiveTab(item.id);
-    } else {
-      openTab(project.id, group, item);
-    }
+    // Clicking only reveals an already-open session. Starting is deliberately
+    // explicit — via the play button or the context menu — so a stray click on
+    // a row can never launch a process.
+    if (tab) setActiveTab(item.id);
   }
 
   function handleStart() {
@@ -314,72 +368,65 @@ function ItemRow({ project, group, item }: { project: Project; group: ItemGroup;
     openTab(project.id, group, item);
   }
 
-  function handleEdit() {
-    selectProject(project.id);
-    setView("settings");
-    setFocusItem(item.id);
-  }
-
-  function handleDelete() {
-    if (!confirmBeforeDelete || confirm(`Delete "${item.name}"?`)) {
-      removeItem(project.id, group, item.id);
-    }
-  }
-
-  const menuItems: ContextMenuItem[] =
-    status === "running"
-      ? [
-          { label: "Stop", icon: <Square size={13} strokeWidth={2} />, onClick: () => stopItem(item.id) },
-          { label: "Edit", icon: <Pencil size={13} strokeWidth={2} />, onClick: handleEdit },
-          { label: "Delete", icon: <Trash2 size={13} strokeWidth={2} />, onClick: handleDelete, danger: true },
-        ]
-      : [
-          {
-            label: status === "exited" ? "Restart" : "Start",
-            icon: <Play size={13} strokeWidth={2} />,
-            onClick: handleStart,
-          },
-          { label: "Edit", icon: <Pencil size={13} strokeWidth={2} />, onClick: handleEdit },
-          { label: "Delete", icon: <Trash2 size={13} strokeWidth={2} />, onClick: handleDelete, danger: true },
-        ];
-
   return (
     <div
       className={`item-row${isActiveTab ? " item-row--active" : ""}`}
+      data-ctx="item"
+      data-item-id={item.id}
+      data-project-id={project.id}
+      data-group={group}
       onClick={handleRowClick}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        setMenu({ x: e.clientX, y: e.clientY });
-      }}
     >
       <span className={`item-row__dot item-row__dot--${status}`} />
       <span className="item-row__name">{item.name}</span>
-      {status === "running" ? (
-        <button
-          className="item-row__action"
-          type="button"
-          title="Stop"
-          onClick={(e) => {
-            e.stopPropagation();
-            stopItem(item.id);
-          }}
-        >
-          <Square size={12} strokeWidth={2} />
-        </button>
-      ) : (
-        <button
-          className="item-row__action"
-          type="button"
-          title={status === "exited" ? "Restart" : "Start"}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleStart();
-          }}
-        >
-          <Play size={12} strokeWidth={2} />
-        </button>
-      )}
-      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
+
+      {/* Ports and the action buttons share this slot: ports show at rest, the
+          buttons replace them on hover, so the row never changes height. */}
+      <span className="item-row__trail">
+        {ports.length > 0 && (
+          <span className="item-row__ports">{ports.map((p) => `:${p}`).join(" ")}</span>
+        )}
+        <span className="item-row__actions">
+          {status !== "idle" && (
+            <button
+              className="item-row__action"
+              type="button"
+              title="Restart"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleStart();
+              }}
+            >
+              <RotateCcw size={13} strokeWidth={2.25} />
+            </button>
+          )}
+          {status === "running" ? (
+            <button
+              className="item-row__action item-row__action--stop"
+              type="button"
+              title="Stop"
+              onClick={(e) => {
+                e.stopPropagation();
+                stopItem(item.id);
+              }}
+            >
+              <Square size={12} strokeWidth={2.6} />
+            </button>
+          ) : (
+            <button
+              className="item-row__action"
+              type="button"
+              title="Start"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleStart();
+              }}
+            >
+              <Play size={13} strokeWidth={2.25} />
+            </button>
+          )}
+        </span>
+      </span>
     </div>
   );
 }

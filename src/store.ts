@@ -9,9 +9,10 @@
 import { create } from "zustand";
 import { v4 as uuid } from "uuid";
 import type { AppSettings, Agent, Config, ItemGroup, Project, Runnable } from "./types";
-import { defaultAppSettings, emptyConfig } from "./types";
+import { defaultAppSettings, defaultKeybindings, emptyConfig } from "./types";
 import { loadConfig, saveConfig } from "./lib/config";
-import { killSession } from "./lib/pty";
+import { closeRun, stopRun } from "./lib/session";
+import { applyProjectConfigs, syncProjectConfigs } from "./lib/projectConfig";
 
 export type TabStatus = "starting" | "running" | "exited";
 
@@ -26,6 +27,8 @@ export type Tab = {
   sessionId: string | null; // set once spawn_session resolves
   status: TabStatus;
   exitCode: number | null;
+  /** TCP ports this session is listening on, polled by useSessionPorts. */
+  ports: number[];
 };
 
 type View = "terminals" | "settings" | "app-settings";
@@ -40,6 +43,11 @@ type StoreState = {
   /** Set by the sidebar's "Edit" context-menu action; SettingsView expands +
    *  scrolls to this item once, then clears it. */
   focusItemId: string | null;
+  /** Whether the sidebar's new-project form is open. In the store rather than
+   *  the component so the context menu can open it. */
+  addingProject: boolean;
+  /** Whether SettingsView's script-import modal is open (same reason). */
+  importOpen: boolean;
 
   hydrate: () => Promise<void>;
 
@@ -49,6 +57,8 @@ type StoreState = {
   selectProject: (id: string) => void;
   setView: (view: View) => void;
   setFocusItem: (itemId: string | null) => void;
+  setAddingProject: (value: boolean) => void;
+  setImportOpen: (value: boolean) => void;
   updateSettings: (patch: Partial<AppSettings>) => void;
 
   addItem: (projectId: string, group: ItemGroup, item: Partial<Runnable> & { provider?: Agent["provider"] }) => string;
@@ -58,15 +68,21 @@ type StoreState = {
 
   openTab: (projectId: string, group: ItemGroup, item: Runnable) => void;
   quickTerminal: (projectId: string) => void;
+  cycleTab: (delta: number) => void;
   setActiveTab: (itemId: string) => void;
   setTabSession: (itemId: string, sessionId: string) => void;
   setTabExited: (itemId: string, code: number | null) => void;
+  setSessionPorts: (portsBySession: Record<string, number[]>) => void;
   closeTab: (itemId: string) => void;
 
   startProject: (projectId: string) => void;
   stopProject: (projectId: string) => void;
   stopItem: (itemId: string) => void;
 };
+
+function sameNumbers(a: number[], b: number[]): boolean {
+  return a.length === b.length && a.every((n, i) => n === b[i]);
+}
 
 function regenerateProjectIds(project: Project): Project {
   const remap = <T extends Runnable>(items: T[]): T[] => items.map((it) => ({ ...it, id: uuid() }));
@@ -84,6 +100,11 @@ function scheduleSave(config: Config) {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveConfig(config).catch((e) => console.error("Failed to save config", e));
+    // Projects opted into an in-folder settings file get it rewritten alongside
+    // the app's own config, so the two never drift.
+    syncProjectConfigs(config.projects).catch((e) =>
+      console.error("Failed to write project settings file", e),
+    );
   }, 300);
 }
 
@@ -106,6 +127,8 @@ export const useStore = create<StoreState>((set, get) => ({
   tabs: [],
   activeTabItemId: null,
   focusItemId: null,
+  addingProject: false,
+  importOpen: false,
 
   hydrate: async () => {
     // Old projects.json files predate the `settings` key (and any settings
@@ -114,8 +137,16 @@ export const useStore = create<StoreState>((set, get) => ({
     const raw = (await loadConfig()) as Partial<Config>;
     const config: Config = {
       version: 1,
-      settings: { ...defaultAppSettings, ...raw.settings },
-      projects: raw.projects ?? [],
+      settings: {
+        ...defaultAppSettings,
+        ...raw.settings,
+        // keybindings needs its own merge: a spread would replace the whole map
+        // with a saved one, leaving any action added since that save undefined.
+        keybindings: { ...defaultKeybindings, ...raw.settings?.keybindings },
+      },
+      // An in-folder settings file wins over the stored copy, so pulling a
+      // teammate's change to it is picked up on next launch.
+      projects: await applyProjectConfigs(raw.projects ?? []),
     };
     set({
       config,
@@ -165,6 +196,9 @@ export const useStore = create<StoreState>((set, get) => ({
   },
   setView: (view) => set({ view }),
   setFocusItem: (itemId) => set({ focusItemId: itemId }),
+  setAddingProject: (value) => set({ addingProject: value }),
+  // Opening the importer only makes sense on the project settings view.
+  setImportOpen: (value) => set(value ? { importOpen: true, view: "settings" } : { importOpen: false }),
 
   updateSettings: (patch) => {
     const config = { ...get().config, settings: { ...get().config.settings, ...patch } };
@@ -220,6 +254,12 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   openTab: (projectId, group, item) => {
+    // Restarting replaces this item's previous run. Close it explicitly —
+    // dropping the tab alone would leave a still-running process with nothing
+    // tracking it (reachable via "Start project" on an already-running project).
+    const previous = get().tabs.find((t) => t.itemId === item.id);
+    if (previous) closeRun(previous.runId).catch(() => {});
+
     const tabs = get().tabs.filter((t) => t.itemId !== item.id);
     const tab: Tab = {
       runId: uuid(),
@@ -230,6 +270,7 @@ export const useStore = create<StoreState>((set, get) => ({
       sessionId: null,
       status: "starting",
       exitCode: null,
+      ports: [],
     };
     set({ tabs: [...tabs, tab], activeTabItemId: item.id, view: "terminals" });
   },
@@ -241,6 +282,15 @@ export const useStore = create<StoreState>((set, get) => ({
     if (item) get().openTab(projectId, "terminals", item);
   },
 
+  cycleTab: (delta) => {
+    const tabs = get().tabs.filter((t) => t.projectId === get().activeProjectId);
+    if (tabs.length === 0) return;
+    const current = tabs.findIndex((t) => t.itemId === get().activeTabItemId);
+    // Wrap in both directions; an unknown current index starts from the first tab.
+    const next = (((current === -1 ? 0 : current + delta) % tabs.length) + tabs.length) % tabs.length;
+    set({ activeTabItemId: tabs[next].itemId, view: "terminals" });
+  },
+
   setActiveTab: (itemId) => set({ activeTabItemId: itemId, view: "terminals" }),
 
   setTabSession: (itemId, sessionId) =>
@@ -250,14 +300,27 @@ export const useStore = create<StoreState>((set, get) => ({
 
   setTabExited: (itemId, code) =>
     set({
-      tabs: get().tabs.map((t) => (t.itemId === itemId ? { ...t, status: "exited", exitCode: code } : t)),
+      tabs: get().tabs.map((t) =>
+        t.itemId === itemId ? { ...t, status: "exited", exitCode: code, ports: [] } : t,
+      ),
     }),
+
+  setSessionPorts: (portsBySession) => {
+    const tabs = get().tabs;
+    // Assign from the full snapshot so a port that closed is dropped, not kept.
+    const next = tabs.map((t) => {
+      const ports = (t.sessionId && portsBySession[t.sessionId]) || [];
+      return sameNumbers(t.ports, ports) ? t : { ...t, ports };
+    });
+    // Avoid a re-render when nothing moved — this runs on a timer.
+    if (next.some((t, i) => t !== tabs[i])) set({ tabs: next });
+  },
 
   closeTab: (itemId) => {
     const tab = get().tabs.find((t) => t.itemId === itemId);
-    if (tab?.sessionId && tab.status === "running") {
-      killSession(tab.sessionId).catch(() => {});
-    }
+    // closeRun regardless of status: it also releases the session's listeners
+    // and registry entry, which an already-exited session still holds.
+    if (tab) closeRun(tab.runId).catch(() => {});
     const tabs = get().tabs.filter((t) => t.itemId !== itemId);
     const activeTabItemId = get().activeTabItemId === itemId ? tabs[tabs.length - 1]?.itemId ?? null : get().activeTabItemId;
     set({ tabs, activeTabItemId });
@@ -271,16 +334,16 @@ export const useStore = create<StoreState>((set, get) => ({
     });
   },
 
+  // Stop leaves the tab open and the listeners attached, so the exit event
+  // still arrives and the row flips to "exited" with its code.
   stopProject: (projectId) => {
     get()
-      .tabs.filter((t) => t.projectId === projectId && t.status === "running" && t.sessionId)
-      .forEach((t) => killSession(t.sessionId!).catch(() => {}));
+      .tabs.filter((t) => t.projectId === projectId && t.status === "running")
+      .forEach((t) => stopRun(t.runId).catch(() => {}));
   },
 
   stopItem: (itemId) => {
     const tab = get().tabs.find((t) => t.itemId === itemId);
-    if (tab?.sessionId && tab.status === "running") {
-      killSession(tab.sessionId).catch(() => {});
-    }
+    if (tab && tab.status === "running") stopRun(tab.runId).catch(() => {});
   },
 }));

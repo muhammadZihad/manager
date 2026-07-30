@@ -1,37 +1,66 @@
-// Global app shortcuts. Deliberately uses Shift+T / Shift+W (not bare
-// Ctrl/Cmd+T / +W) for the tab actions — plain Ctrl+T and Ctrl+W are real
-// shell bindings (transpose-chars, delete-word-backward) that would otherwise
-// leak through to whatever's running in the focused terminal. This mirrors
-// how Windows Terminal handles the same conflict.
+// Global app shortcuts, driven by the user's configured keybindings.
+//
+// Every chord the app claims is a chord the focused terminal never receives,
+// so the defaults stay off keys the shell needs (see defaultKeybindings and
+// the RESERVED list in lib/keys.ts).
+//
+// Project switching (Mod+1…9) is handled here but isn't rebindable — it's a
+// range of nine bindings rather than a single chord.
 
 import { useEffect } from "react";
 import { useStore } from "../store";
+import { matchesCombo } from "../lib/keys";
+import type { KeybindingAction } from "../types";
 
 export function useKeyboardShortcuts() {
   useEffect(() => {
     function handler(e: KeyboardEvent) {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
+      // Cheap bail-out: every binding requires at least one modifier, so plain
+      // typing into a terminal never walks the binding table.
+      if (!e.metaKey && !e.ctrlKey && !e.altKey) return;
 
-      if (e.shiftKey && e.key.toLowerCase() === "t") {
-        e.preventDefault();
-        const { activeProjectId, quickTerminal } = useStore.getState();
-        if (activeProjectId) quickTerminal(activeProjectId);
-        return;
+      const state = useStore.getState();
+      const { keybindings } = state.config.settings;
+
+      const run: Record<KeybindingAction, () => void> = {
+        newTerminal: () => {
+          if (state.activeProjectId) state.quickTerminal(state.activeProjectId);
+        },
+        closeTab: () => {
+          if (state.activeTabItemId) state.closeTab(state.activeTabItemId);
+        },
+        nextTab: () => state.cycleTab(1),
+        prevTab: () => state.cycleTab(-1),
+        startProject: () => {
+          if (state.activeProjectId) state.startProject(state.activeProjectId);
+        },
+        stopAllSessions: () => {
+          if (state.activeProjectId) state.stopProject(state.activeProjectId);
+        },
+        openAppSettings: () => state.setView("app-settings"),
+        openProjectSettings: () => {
+          if (state.activeProjectId) state.setView("settings");
+        },
+        focusSearch: () => {
+          const input = document.getElementById("sidebar-search") as HTMLInputElement | null;
+          input?.focus();
+          input?.select();
+        },
+      };
+
+      for (const [action, combo] of Object.entries(keybindings)) {
+        if (matchesCombo(e, combo)) {
+          e.preventDefault();
+          run[action as KeybindingAction]?.();
+          return;
+        }
       }
 
-      if (e.shiftKey && e.key.toLowerCase() === "w") {
+      // Fixed: Mod+1…9 jumps to the n-th project.
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && /^Digit[1-9]$/.test(e.code)) {
         e.preventDefault();
-        const { activeTabItemId, closeTab } = useStore.getState();
-        if (activeTabItemId) closeTab(activeTabItemId);
-        return;
-      }
-
-      if (!e.shiftKey && /^[1-9]$/.test(e.key)) {
-        e.preventDefault();
-        const { config, selectProject } = useStore.getState();
-        const project = config.projects[Number(e.key) - 1];
-        if (project) selectProject(project.id);
+        const project = state.config.projects[Number(e.code.slice(5)) - 1];
+        if (project) state.selectProject(project.id);
       }
     }
 

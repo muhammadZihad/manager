@@ -27,7 +27,42 @@ struct PtySession {
     killer: Box<dyn ChildKiller + Send + Sync>,
     reader: Option<Box<dyn Read + Send>>,
     reader_handle: Option<JoinHandle<()>>,
+    /// Direct child's pid. Because portable-pty calls setsid(), the child is a
+    /// session/process-group leader, so this doubles as the process-group id for
+    /// the whole job — needed both to kill descendants and to find which ports
+    /// the job is listening on.
+    pid: Option<u32>,
 }
+
+/// Signal an entire process group.
+///
+/// Killing only the direct child is not enough: `npm run dev` or
+/// `php artisan serve` fork a grandchild that is the process actually holding
+/// the port, and it survives its parent. Signalling the group reaches them.
+#[cfg(unix)]
+fn signal_group(pid: u32, signal: i32) {
+    // Safety: killpg is async-signal-safe and takes plain integers. A failure
+    // (group already gone) is reported via errno, which we intentionally ignore.
+    unsafe {
+        libc::killpg(pid as libc::pid_t, signal);
+    }
+}
+
+#[cfg(not(unix))]
+fn signal_group(_pid: u32, _signal: i32) {
+    // Windows has no process groups in this sense; ChildKiller::kill handles the
+    // ConPTY child, and descendants are left to the console teardown.
+}
+
+#[cfg(unix)]
+const SIG_TERM: i32 = libc::SIGTERM;
+#[cfg(not(unix))]
+const SIG_TERM: i32 = 15;
+
+#[cfg(unix)]
+const SIG_KILL: i32 = libc::SIGKILL;
+#[cfg(not(unix))]
+const SIG_KILL: i32 = 9;
 
 #[derive(Default)]
 pub struct PtyManager {
@@ -35,11 +70,15 @@ pub struct PtyManager {
 }
 
 impl PtyManager {
-    /// Kill every live session. Called on app exit so no shell/agent process
-    /// is left orphaned when the window closes.
+    /// Kill every live session and everything it spawned. Called on app exit so
+    /// nothing is left holding a port after Manager is gone.
     pub fn kill_all(&self) {
         let mut sessions = self.sessions.lock().unwrap();
         for (_, mut session) in sessions.drain() {
+            // The app is going away, so don't wait for a graceful shutdown.
+            if let Some(pid) = session.pid {
+                signal_group(pid, SIG_KILL);
+            }
             let _ = session.killer.kill();
         }
     }
@@ -48,6 +87,16 @@ impl PtyManager {
     /// the quit confirmation prompt).
     pub fn running_count(&self) -> usize {
         self.sessions.lock().unwrap().len()
+    }
+
+    /// (session id, process-group id) for every session that has a pid.
+    pub fn session_pids(&self) -> Vec<(String, u32)> {
+        self.sessions
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|(id, session)| session.pid.map(|pid| (id.clone(), pid)))
+            .collect()
     }
 }
 
@@ -120,6 +169,7 @@ pub fn spawn_session(
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     let killer = child.clone_killer();
+    let pid = child.process_id();
     // Drop our end of the slave now that the child owns it (standard portable-pty hygiene).
     drop(pair.slave);
 
@@ -136,6 +186,7 @@ pub fn spawn_session(
             killer,
             reader: Some(reader),
             reader_handle: None,
+            pid,
         },
     );
 
@@ -148,6 +199,10 @@ pub fn spawn_session(
 /// Starts the reader thread for a session. Must be called by the frontend only
 /// after it has attached its `pty://output/{id}` listener, to avoid missing
 /// early output from fast-starting programs.
+///
+/// Idempotent: the frontend re-attaches a terminal to an existing session (on
+/// remount) and calls this again, so a second call is a no-op rather than an
+/// error.
 #[tauri::command]
 pub fn start_reading(
     app: AppHandle,
@@ -157,7 +212,10 @@ pub fn start_reading(
     let reader = {
         let mut sessions = state.sessions.lock().unwrap();
         let session = sessions.get_mut(&session_id).ok_or("no such session")?;
-        session.reader.take().ok_or("session already reading")?
+        match session.reader.take() {
+            Some(reader) => reader,
+            None => return Ok(()), // already streaming
+        }
     };
 
     let handle = spawn_reader_thread(app, session_id.clone(), reader);
@@ -208,6 +266,12 @@ pub fn resize_session(
 pub fn kill_session(app: AppHandle, state: State<'_, PtyManager>, session_id: String) -> Result<(), String> {
     let mut sessions = state.sessions.lock().unwrap();
     if let Some(mut session) = sessions.remove(&session_id) {
+        // SIGTERM the group first so servers get a chance to shut down cleanly,
+        // then SIGKILL the direct child so the session always ends and the
+        // reaper thread reports the exit.
+        if let Some(pid) = session.pid {
+            signal_group(pid, SIG_TERM);
+        }
         let _ = session.killer.kill();
     }
     drop(sessions);
