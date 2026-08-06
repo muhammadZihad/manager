@@ -13,8 +13,14 @@
   --border-strong: #383c48;
   --text: #e6e7eb;
   --text-dim: #9a9ea8;
-  --text-faint: #6b6f7a;
+  /* 5.28:1 on --bg-panel. The old #6b6f7a was 3.35:1 and carried every hint,
+     empty state and placeholder — the text a new user most needs to read. */
+  --text-faint: #8b90a0;
   --accent: #2ee6a6;
+  /* Accent split in two: --accent for fills, borders and dots (3:1 is enough for
+     non-text UI), --accent-text for anything actually read (needs 4.5:1). They
+     match in dark, where the bright teal already passes at 10.41:1. */
+  --accent-text: #2ee6a6;
   --accent-dim: #1f9e73;
   --accent-bg: rgba(46, 230, 166, 0.12);
   --danger: #ef5a5a;
@@ -49,8 +55,11 @@
   --border-strong: #cbcfd6;
   --text: #1b1d24;
   --text-dim: #5b616d;
-  --text-faint: #8b909b;
+  /* 4.83:1 on white; the old #8b909b was 3.20:1. */
+  --text-faint: #6b7280;
   --accent: #12a874;
+  /* #12a874 is only 3.05:1 on white — fine as a fill, too weak to read. */
+  --accent-text: #0d7d57;
   --accent-dim: #0d7d57;
   --accent-bg: rgba(18, 168, 116, 0.1);
   --icon-commands: #1a63b8;
@@ -69,8 +78,9 @@
     --border-strong: #cbcfd6;
     --text: #1b1d24;
     --text-dim: #5b616d;
-    --text-faint: #8b909b;
+    --text-faint: #6b7280;
     --accent: #12a874;
+    --accent-text: #0d7d57;
     --accent-dim: #0d7d57;
     --accent-bg: rgba(18, 168, 116, 0.1);
     --icon-commands: #1a63b8;
@@ -105,6 +115,35 @@ button {
 input,
 select {
   font-family: inherit;
+}
+
+/* Keyboard focus must be visible on every control. :focus-visible rather than
+   :focus so a mouse click doesn't leave a ring behind. Applied globally because
+   the alternative — a rule per control — is how it went missing in the first
+   place. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Inputs already show focus on their border, so the ring sits tight to it
+   rather than floating away from the field. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline-offset: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ---------- App shell ---------- */
@@ -154,6 +193,14 @@ select {
   color: var(--text-faint);
 }
 
+/* The input is borderless inside this bordered wrapper, so focus is shown on
+   the wrapper — a ring around the bare input would float oddly inside it. */
+.sidebar__search:focus-within {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .sidebar__search input {
   border: none;
   background: transparent;
@@ -192,7 +239,7 @@ select {
 
 .sidebar__add-project:hover {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .sidebar__app-settings {
@@ -235,7 +282,6 @@ select {
   color: var(--text);
   padding: var(--space-2);
   font-size: 13px;
-  outline: none;
 }
 
 .new-project-form input:focus {
@@ -348,7 +394,7 @@ select {
 .project-row__badge {
   background: var(--accent);
   color: #0b0c0f;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 999px;
@@ -372,7 +418,7 @@ select {
 }
 
 .project-row__icon-btn--play:hover:not(:disabled) {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .project-row__icon-btn--stop:hover {
@@ -425,7 +471,7 @@ select {
 .group-section__count {
   margin-left: auto;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: 11.5px;
 }
 
 .group-section__items {
@@ -486,6 +532,25 @@ select {
   box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
+/* Spawning takes long enough to notice, and previously looked exactly like
+   idle — the store modelled this state but nothing rendered it. */
+.item-row__dot--starting,
+.status-footer__dot--starting {
+  background: var(--warning);
+  border-color: var(--warning);
+  animation: dot-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
 .item-row__dot--exited {
   background: var(--danger);
   border-color: var(--danger);
@@ -508,11 +573,13 @@ select {
 }
 
 .item-row__ports {
-  color: var(--accent);
+  color: var(--accent-text);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.01em;
   white-space: nowrap;
+  /* Stops the label changing width as port digits change. */
+  font-variant-numeric: tabular-nums;
 }
 
 .item-row__actions {
@@ -521,11 +588,15 @@ select {
   gap: 2px;
 }
 
-.item-row:hover .item-row__ports {
+/* focus-within as well as hover: without it the action buttons are unreachable
+   by keyboard, since display:none removes them from the tab order entirely. */
+.item-row:hover .item-row__ports,
+.item-row:focus-within .item-row__ports {
   display: none;
 }
 
-.item-row:hover .item-row__actions {
+.item-row:hover .item-row__actions,
+.item-row:focus-within .item-row__actions {
   display: flex;
 }
 
@@ -539,7 +610,7 @@ select {
 }
 
 .item-row__action:hover {
-  color: var(--accent);
+  color: var(--accent-text);
   background: var(--bg-panel-raised);
 }
 
@@ -744,7 +815,6 @@ select {
   color: var(--text);
   padding: var(--space-2);
   font-size: 13px;
-  outline: none;
 }
 
 .field input:focus,
@@ -845,7 +915,6 @@ select {
   color: var(--text);
   padding: var(--space-1) var(--space-2);
   font-size: 12.5px;
-  outline: none;
   min-width: 0;
 }
 
@@ -1028,7 +1097,7 @@ select {
 .modal__row-source {
   flex-shrink: 0;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: 11.5px;
 }
 
 .modal__actions {
@@ -1067,7 +1136,7 @@ select {
 }
 
 .settings-tabs__tab--active {
-  color: var(--accent);
+  color: var(--accent-text);
   border-bottom-color: var(--accent);
 }
 
@@ -1157,7 +1226,7 @@ select {
 .scale-chip--active {
   border-color: var(--accent);
   background: var(--accent-bg);
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
@@ -1277,7 +1346,7 @@ select {
 .keybind-row__combo--recording {
   border-color: var(--accent);
   background: var(--accent-bg);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .keybind-row__combo--conflict {
